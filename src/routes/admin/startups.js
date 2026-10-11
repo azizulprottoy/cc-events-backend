@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { nanoid } = require('nanoid');
 const { Startup, ApiKey, StartupUser } = require('../../models');
 const { generateApiKeyPair } = require('../../utils/apiKey');
@@ -58,8 +59,11 @@ router.get(
     const startup = await Startup.findById(req.params.id);
     if (!startup) return res.status(404).json({ error: 'Startup not found' });
 
-    const apiKey = await ApiKey.findOne({ startupId: startup._id, revokedAt: null });
-    res.json({ startup, apiKey: apiKey ? { key: apiKey.key } : null });
+    const [apiKey, users] = await Promise.all([
+      ApiKey.findOne({ startupId: startup._id, revokedAt: null }),
+      StartupUser.find({ startupId: startup._id }).select('email role createdAt updatedAt').sort({ role: -1, createdAt: 1 }),
+    ]);
+    res.json({ startup, apiKey: apiKey ? { key: apiKey.key } : null, users });
   })
 );
 
@@ -89,6 +93,32 @@ router.post(
     await ApiKey.create({ startupId: startup._id, key, secret });
 
     res.status(201).json({ apiKey: { key, secret } });
+  })
+);
+
+// Passwords are stored only as bcrypt hashes, so they can't be shown. A
+// superadmin can instead set a new one: generated unless supplied, returned
+// once in the response. The old password stops working immediately.
+router.post(
+  '/:id/users/:userId/reset-password',
+  asyncHandler(async (req, res) => {
+    const { password } = req.body || {};
+    if (password !== undefined && (typeof password !== 'string' || password.length < 8)) {
+      return res.status(400).json({ error: 'password must be at least 8 characters' });
+    }
+
+    if (![req.params.id, req.params.userId].every(mongoose.isValidObjectId)) {
+      return res.status(404).json({ error: 'User not found for this startup' });
+    }
+    const user = await StartupUser.findOne({ _id: req.params.userId, startupId: req.params.id });
+    if (!user) return res.status(404).json({ error: 'User not found for this startup' });
+
+    const newPassword = password || nanoid(12);
+    user.passwordHash = await hashPassword(newPassword);
+    await user.save();
+
+    console.log(`Superadmin ${req.superAdminId} reset password for startup user ${user.email} (${req.params.id})`);
+    res.json({ email: user.email, password: newPassword });
   })
 );
 

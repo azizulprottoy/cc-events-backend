@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireStartupUser } = require('../../middleware/auth');
 const dashboardService = require('../../services/dashboardService');
+const insightsService = require('../../services/insightsService');
 const { Startup } = require('../../models');
 const { generateDashboardLinkToken } = require('../../utils/dashboardLink');
 const asyncHandler = require('../../utils/asyncHandler');
@@ -38,6 +39,47 @@ router.get(
   asyncHandler(async (req, res) => {
     const { event, externalId, page, limit } = req.query;
     res.json(await dashboardService.getEventsFeed(req.startupId, { event, externalId, page, limit }));
+  })
+);
+
+// Insights: which products/categories (any event property) are popular and
+// which users are most interested in each — the input for targeted marketing.
+router.get(
+  '/insights/properties',
+  asyncHandler(async (req, res) => {
+    res.json(await insightsService.listProperties(req.startupId));
+  })
+);
+
+router.get(
+  '/insights/events',
+  asyncHandler(async (req, res) => {
+    const { property, days } = req.query;
+    res.json(await insightsService.listEvents(req.startupId, { property, days }));
+  })
+);
+
+router.get(
+  '/insights/trend',
+  asyncHandler(async (req, res) => {
+    const { property, days, events, top } = req.query;
+    res.json(await insightsService.getTrend(req.startupId, { property, days, events, top }));
+  })
+);
+
+router.get(
+  '/insights/top',
+  asyncHandler(async (req, res) => {
+    const { property, days, events, limit } = req.query;
+    res.json(await insightsService.getTopValues(req.startupId, { property, days, events, limit }));
+  })
+);
+
+router.get(
+  '/insights/audience',
+  asyncHandler(async (req, res) => {
+    const { property, days, events, value, limit } = req.query;
+    res.json(await insightsService.getAudience(req.startupId, { property, days, events, value, limit }));
   })
 );
 
