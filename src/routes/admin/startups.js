@@ -3,6 +3,7 @@ const { nanoid } = require('nanoid');
 const { Startup, ApiKey, StartupUser } = require('../../models');
 const { generateApiKeyPair } = require('../../utils/apiKey');
 const { hashPassword } = require('../../utils/password');
+const { generateDashboardLinkToken } = require('../../utils/dashboardLink');
 const { requireSuperAdmin } = require('../../middleware/auth');
 const asyncHandler = require('../../utils/asyncHandler');
 
@@ -88,6 +89,30 @@ router.post(
     await ApiKey.create({ startupId: startup._id, key, secret });
 
     res.status(201).json({ apiKey: { key, secret } });
+  })
+);
+
+// Create or rotate the startup's view-only dashboard link. Rotating
+// invalidates the previous link.
+router.post(
+  '/:id/dashboard-link',
+  asyncHandler(async (req, res) => {
+    const startup = await Startup.findByIdAndUpdate(
+      req.params.id,
+      { dashboardLinkToken: generateDashboardLinkToken() },
+      { new: true }
+    );
+    if (!startup) return res.status(404).json({ error: 'Startup not found' });
+    res.status(201).json({ token: startup.dashboardLinkToken });
+  })
+);
+
+router.delete(
+  '/:id/dashboard-link',
+  asyncHandler(async (req, res) => {
+    const startup = await Startup.findByIdAndUpdate(req.params.id, { dashboardLinkToken: null }, { new: true });
+    if (!startup) return res.status(404).json({ error: 'Startup not found' });
+    res.status(204).end();
   })
 );
 

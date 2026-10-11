@@ -8,6 +8,7 @@ const swaggerSpec = require('./docs/swaggerSpec');
 const superAdminAuthRoutes = require('./routes/auth/superAdminAuth');
 const startupAuthRoutes = require('./routes/auth/startupAuth');
 const adminStartupsRoutes = require('./routes/admin/startups');
+const adminEventsRoutes = require('./routes/admin/events');
 const ingestRoutes = require('./routes/ingest');
 const dashboardRoutes = require('./routes/dashboard');
 const notificationsRoutes = require('./routes/notifications');
@@ -26,6 +27,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/admin/auth', superAdminAuthRoutes);
 app.use('/admin/startups', adminStartupsRoutes);
+app.use('/admin', adminEventsRoutes);
 app.use('/auth', startupAuthRoutes);
 app.use('/v1', ingestRoutes);
 app.use('/dashboard', dashboardRoutes);

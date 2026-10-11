@@ -11,7 +11,7 @@ async function start() {
   scheduleNotificationJobs();
   scheduleRecommendationJob();
   app.listen(port, () => {
-    console.log(`MarcoPolo backend listening on port ${port}`);
+    console.log(`ccevents backend listening on port ${port}`);
   });
 }
 

@@ -8,8 +8,16 @@ const startupSchema = new mongoose.Schema(
     recommendationConfig: {
       lookbackDays: { type: Number, default: 30 },
     },
+    // Secret for the no-login, read-only dashboard link (/l/:token).
+    // null means no link is active.
+    dashboardLinkToken: { type: String, default: null },
   },
   { timestamps: true }
+);
+
+startupSchema.index(
+  { dashboardLinkToken: 1 },
+  { unique: true, partialFilterExpression: { dashboardLinkToken: { $type: 'string' } } }
 );
 
 module.exports = mongoose.model('Startup', startupSchema);

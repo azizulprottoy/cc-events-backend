@@ -28,6 +28,11 @@ function requireStartupUser(req, res, next) {
   }
   req.startupUserId = decoded.sub;
   req.startupId = new mongoose.Types.ObjectId(decoded.startupId);
+  req.readOnly = Boolean(decoded.readOnly);
+  // Sessions opened from a dashboard link can look but not change anything.
+  if (req.readOnly && !['GET', 'HEAD'].includes(req.method)) {
+    return res.status(403).json({ error: 'This dashboard link is view-only' });
+  }
   next();
 }
 
