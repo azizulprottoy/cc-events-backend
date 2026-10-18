@@ -71,3 +71,44 @@ function track(externalId, event, properties = {}) {
 ```
 
 Mobile apps or backends integrate the same way — it's plain REST, no SDK required.
+
+## 5. Personalised notifications and webhook delivery
+
+Notification rules (dashboard > Notification Rules) pick **when** (on an event,
+broadcast with "Send now", a cron schedule, or inactivity), **who** (user type,
+trait equals, active within N days, did / didn't do an event within N days)
+and **what** (email subject + text + optional HTML, or push title + message +
+link). Every text field is a template:
+
+| Placeholder | Value |
+|---|---|
+| `{{user.username}}`, `{{user.<trait>}}` | traits from `/v1/identify` |
+| `{{user.email}}`, `{{user.phone}}`, `{{user.externalId}}` | end-user profile |
+| `{{event}}`, `{{properties.<key>}}`, `{{<key>}}` | the triggering event (event rules) |
+| `{{inactivityDays}}` | inactivity rules |
+| `{{user.username \| there}}` | fallback when the value is missing |
+
+In HTML, values are escaped. `cooldownHours` stops a rule from reaching the
+same user twice within that window.
+
+### Webhook delivery
+
+A superadmin can set a webhook URL for a startup (admin > startup >
+Notification delivery). Then MarcoPolo doesn't send anything itself: it POSTs
+each rendered message to that URL and the startup delivers it.
+
+```
+POST <webhookUrl>
+X-CC-Events-Timestamp: 1760000000
+X-CC-Events-Signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>
+
+{ "type": "notification.deliver", "id": "<notification id>",
+  "rule": { "id": "...", "name": "..." }, "channel": "email" | "push" | "sms",
+  "externalId": "user_123", "user": { "email": "...", "phone": "..." },
+  "content": { "subject", "title", "body", "html", "url", "from" } }
+```
+
+Verify the signature over the exact raw bytes and reject timestamps more than
+5 minutes old. Reply `200 { "delivered": true }`, or
+`200 { "delivered": false, "reason": "..." }` when it knowingly can't deliver;
+non-2xx counts as failed. "Send test ping" posts `{ "type": "ping" }`.

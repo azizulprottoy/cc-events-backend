@@ -6,6 +6,7 @@ const { generateApiKeyPair } = require('../../utils/apiKey');
 const { hashPassword } = require('../../utils/password');
 const { generateDashboardLinkToken } = require('../../utils/dashboardLink');
 const { requireSuperAdmin } = require('../../middleware/auth');
+const webhookAdapter = require('../../services/delivery/webhookAdapter');
 const asyncHandler = require('../../utils/asyncHandler');
 
 const router = express.Router();
@@ -63,7 +64,7 @@ router.get(
       ApiKey.findOne({ startupId: startup._id, revokedAt: null }),
       StartupUser.find({ startupId: startup._id }).select('email role createdAt updatedAt').sort({ role: -1, createdAt: 1 }),
     ]);
-    res.json({ startup, apiKey: apiKey ? { key: apiKey.key } : null, users });
+    res.json({ startup, apiKey: apiKey ? { key: apiKey.key } : null, users, delivery: await deliveryInfo(startup._id) });
   })
 );
 
@@ -143,6 +144,76 @@ router.delete(
     const startup = await Startup.findByIdAndUpdate(req.params.id, { dashboardLinkToken: null }, { new: true });
     if (!startup) return res.status(404).json({ error: 'Startup not found' });
     res.status(204).end();
+  })
+);
+
+async function deliveryInfo(startupId) {
+  const s = await Startup.findById(startupId).select('+delivery.webhookSecret').lean();
+  return { webhookUrl: s?.delivery?.webhookUrl || null, hasSecret: Boolean(s?.delivery?.webhookSecret) };
+}
+
+const newWebhookSecret = () => `whsec_${nanoid(40)}`;
+
+// Webhook delivery: notifications for this startup are POSTed (signed) to
+// webhookUrl instead of being sent by MarcoPolo. Setting a URL for the first
+// time generates the signing secret, returned once. Empty URL turns it off.
+router.put(
+  '/:id/delivery',
+  asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Startup not found' });
+    const startup = await Startup.findById(req.params.id).select('+delivery.webhookSecret');
+    if (!startup) return res.status(404).json({ error: 'Startup not found' });
+
+    const url = (req.body?.webhookUrl || '').trim();
+    if (url) {
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return res.status(400).json({ error: 'webhookUrl must be a valid URL' });
+      }
+      if (!['https:', 'http:'].includes(parsed.protocol)) return res.status(400).json({ error: 'webhookUrl must be http(s)' });
+    }
+
+    let secret = null;
+    startup.delivery = startup.delivery || {};
+    startup.delivery.webhookUrl = url || null;
+    if (url && !startup.delivery.webhookSecret) {
+      secret = newWebhookSecret();
+      startup.delivery.webhookSecret = secret;
+    }
+    await startup.save();
+    res.json({ ...(await deliveryInfo(startup._id)), ...(secret ? { secret } : {}) });
+  })
+);
+
+router.post(
+  '/:id/delivery/rotate-secret',
+  asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Startup not found' });
+    const secret = newWebhookSecret();
+    const startup = await Startup.findByIdAndUpdate(req.params.id, { 'delivery.webhookSecret': secret }, { new: true });
+    if (!startup) return res.status(404).json({ error: 'Startup not found' });
+    res.status(201).json({ ...(await deliveryInfo(startup._id)), secret });
+  })
+);
+
+// Sends a signed { type: 'ping' } to the webhook to check URL + secret.
+router.post(
+  '/:id/delivery/test',
+  asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Startup not found' });
+    const s = await Startup.findById(req.params.id).select('+delivery.webhookSecret').lean();
+    if (!s) return res.status(404).json({ error: 'Startup not found' });
+    if (!s.delivery?.webhookUrl || !s.delivery?.webhookSecret) {
+      return res.status(400).json({ error: 'Set a webhook URL first' });
+    }
+    try {
+      const reply = await webhookAdapter.ping(s.delivery);
+      res.json({ success: true, reply });
+    } catch (err) {
+      res.json({ success: false, error: err.message });
+    }
   })
 );
 

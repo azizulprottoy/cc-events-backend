@@ -11,6 +11,13 @@ const startupSchema = new mongoose.Schema(
     // Secret for the no-login, read-only dashboard link (/l/:token).
     // null means no link is active.
     dashboardLinkToken: { type: String, default: null },
+    // When webhookUrl is set, notifications are not sent by MarcoPolo's own
+    // email/push/SMS adapters: the rendered message is POSTed to the startup,
+    // signed with webhookSecret, and the startup delivers it.
+    delivery: {
+      webhookUrl: { type: String, default: null },
+      webhookSecret: { type: String, default: null, select: false },
+    },
   },
   { timestamps: true }
 );

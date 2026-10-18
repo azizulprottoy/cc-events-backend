@@ -15,7 +15,7 @@ function getTransporter() {
   return transporter;
 }
 
-// endUser: EndUser doc, content: { subject, body }
+// endUser: EndUser doc, content: { subject, body, html? }
 async function send(endUser, content) {
   if (!endUser.email) throw new Error('EndUser has no email on file');
   if (!smtp.host) {
@@ -28,6 +28,7 @@ async function send(endUser, content) {
     to: endUser.email,
     subject: content.subject || 'Notification',
     text: content.body,
+    html: content.html || undefined,
   });
 }
 
